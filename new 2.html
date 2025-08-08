@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>Simple HLS Player</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: black;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+    /* ให้วิดีโอเต็มหน้าจอพื้นที่ที่ต้องการ */
+    #videoContainer {
+      position: fixed;
+      inset: 0; /* top:0; right:0; bottom:0; left:0 */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: black;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain; /* หรือ "cover" ถ้าต้องการเต็มกรอบ */
+      background: black;
+    }
+
+    /* ปุ่มเล็กๆ ด้านบนขวาสำหรับ toggle ให้เป็น fullscreen หรือ exit */
+    #controlsOverlay {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 20;
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      backdrop-filter: blur(4px);
+    }
+  </style>
+</head>
+<body>
+  <div id="videoContainer">
+    <video id="video" controls autoplay playsinline muted></video>
+
+    <div id="controlsOverlay">
+      <button id="fullscreenBtn" class="btn">Fullscreen</button>
+      <button id="unmuteBtn" class="btn">Unmute</button>
+    </div>
+  </div>
+
+  <!-- hls.js CDN (ใช้เมื่อเบราว์เซอร์ไม่รองรับ HLS โดยตรง) -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.1/dist/hls.min.js"></script>
+  <script>
+    // ใส่ลิงก์สตรีมที่ผู้ใช้ให้มา
+    const streamUrl = "http://nonamevos.com/play/live.php?mac=00:1A:79:23:B7:39&stream=40176&extension=m3u8";
+
+    const video = document.getElementById('video');
+
+    // ถ้าบราว์เซอร์รองรับ HLS แบบ native (Safari) เราตั้ง src ตรงๆ
+    function attachNative() {
+      video.src = streamUrl;
+      video.addEventListener('loadedmetadata', () => {
+        // หากต้องการ autoplay ให้แน่ใจว่า user gesture หรือ muted
+        video.play().catch(()=>{ /* autoplay blocked */ });
+      });
+    }
+
+    // ถ้า hls.js รองรับ ให้ใช้มัน (สำหรับ Chrome/Firefox)
+    function attachHls() {
+      if (window.Hls && Hls.isSupported()) {
+        const hls = new Hls({
+          // คุณสามารถใส่ config เพิ่มเติม เช่น xhrSetup เพื่อแนบ header ถ้าต้องการ
+          // xhrSetup: (xhr, url) => { xhr.setRequestHeader('Referer','...'); xhr.setRequestHeader('User-Agent','...'); }
+        });
+        hls.loadSource(streamUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+          video.play().catch(()=>{/* autoplay blocked */});
+        });
+        // ถ้าต้องการ debug: hls.on(Hls.Events.ERROR, (event, data)=> console.error(data));
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Safari / iOS
+        attachNative();
+      } else {
+        // ไม่มีการรองรับ HLS
+        console.error('HLS not supported in this browser.');
+        // แสดงข้อความให้ผู้ใช้ (fallback)
+        const msg = document.createElement('div');
+        msg.style.position = 'absolute';
+        msg.style.color = 'white';
+        msg.style.left = '50%';
+        msg.style.top = '50%';
+        msg.style.transform = 'translate(-50%,-50%)';
+        msg.style.background = 'rgba(0,0,0,0.6)';
+        msg.style.padding = '12px 16px';
+        msg.style.borderRadius = '8px';
+        msg.textContent = 'เบราว์เซอร์นี้ไม่รองรับ HLS. กรุณาใช้ Safari หรือ Chromium-based browser พร้อม hls.js';
+        document.getElementById('videoContainer').appendChild(msg);
+      }
+    }
+
+    // เริ่มการต่อสตรีม
+    (function init() {
+      // หาก browser สามารถเล่น .m3u8 โดยตรงใน <video> ให้ใช้ native
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        attachNative();
+      } else {
+        attachHls();
+      }
+    })();
+
+    // Fullscreen toggle
+    const fsBtn = document.getElementById('fullscreenBtn');
+    fsBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => console.warn(err));
+      } else {
+        document.exitFullscreen().catch(err => console.warn(err));
+      }
+    });
+
+    // Unmute toggle (autoplay likely muted; ให้ผู้ใช้เปิดเสียงได้)
+    const unmuteBtn = document.getElementById('unmuteBtn');
+    unmuteBtn.addEventListener('click', () => {
+      if (video.muted) {
+        video.muted = false;
+        unmuteBtn.textContent = 'Mute';
+      } else {
+        video.muted = true;
+        unmuteBtn.textContent = 'Unmute';
+      }
+    });
+
+    // ปุ่มคีย์บอร์ดพื้นฐานสำหรับ remote (ขึ้น/ลง/enter => ไม่จำเป็นเพราะไม่มีเมนู)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === ' ' ) { // space: play/pause
+        e.preventDefault();
+        if (video.paused) video.play(); else video.pause();
+      } else if (e.key === 'ArrowLeft') {
+        video.currentTime = Math.max(0, video.currentTime - 10);
+      } else if (e.key === 'ArrowRight') {
+        video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
+      }
+    });
+  </script>
+</body>
+</html>
