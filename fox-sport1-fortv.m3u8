@@ -1,0 +1,4 @@
+#EXTM3U  <!--hub-premier-->
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1000000
+http://fortv.cc:8080/live/PyRR3Hy/DthK0fv/46792.m3u8
